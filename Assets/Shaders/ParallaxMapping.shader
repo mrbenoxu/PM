@@ -53,6 +53,44 @@ Shader "Unlit/ParallaxMapping"
                 o.vertex = TransformObjectToHClip(v.positionOS);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
 
+				// Unity使用的是列矩阵，如A,B,C是三个互相垂直的单位向量，则它们构建的变换矩阵为：
+				// float3x3 mat = float3x3(A.x, B.x, C.x,
+				//						   A.y, B.y, C.y,
+				//						   A.z, B.z, C.z);
+				// 这构建的是一个由ABC三个向量所构建的空间转向ABC三个向量所在的空间
+				// 比如ABC三个是tangnetWS、bitangentWS和normalWS的话，那么三个向量构建的就是一个从切线空间转为世界空间的变换矩阵：
+				// float3x3 tangentToWorld = float3x3(tangentWS.x, bitangentWS.x, normalWS.x,
+				// 									  tangentWS.y, bitangentWS.y, normalWS.y,
+				//									  tangnetWS.z, bitangentWS.z, normalWS.z);
+				// 变换矩阵中旋转矩阵和统一缩放的矩阵是正立矩阵，而平移矩阵并不是正交矩阵
+				// 正交矩阵的有一个特性就是它的逆矩阵等于它的转置矩阵，所以上面如果ABC所构建的是正交矩阵的话，那么它的逆矩阵为：
+				// float3x3 invMat = float3x3(A.x, A.y, A.z,
+				//                            B.x, B.y, B.z,
+				//                            C.x, C.y, C.z);
+				// 或者最常见的形式为:
+				// float3x3 invMat = float3x3(A, B, C);
+				// 再或者：
+				// float3x3 invMat = transpose(mat);
+				// 上面之所以成立就是因为正交矩阵的逆矩阵为它转置矩阵
+				// 因此，如果要使用tagnentWS、bitangentWS和normalWS构建一个从世界空间到切线空间的变换矩阵的话，则矩阵为：
+				// float3x3 worldToTangent = float3x3(tangentWS, bitangentWS, normalWS);
+				// 或者:
+				// float3x3 worldToTangent = transpose(tangentToWorld);
+				// 当然上面这些成立的前提就是ABC构建的是正交矩阵，如果不是正交矩阵的话，那么就不能这么操作。
+				// float3x3 objectToTangent = float3x3(v.tangentOS.xyz, 
+				//                                     cross(v.normalOS, v.tangentOS.xyz) * v.tangentOS.w,
+				//                                     v.normalOS.xyz);
+				// o.tangentViewDir = mul(objectToTangent, ObjSpaceViewDir(v.positionOS));
+				// 上面这个代码段是将视向量转到切空间下，但这段代码在非统一缩放下是错的。
+				// 首先由模型空间下的tangentOS、bitangnetOS和normalOS构建的变换矩阵为：
+				// float3x3 tangentToObject = float3x3(tangentOS.x, bitangentOS.x, normalOS.x,
+				//									   tangentOS.y, bitangnetOS.y, normalOS.y,
+				//									   tangentOS.z, bitangnetOS.z, normalOS.z);
+				// 因为非统一缩放下构建的矩阵并不是正交矩阵，所以tangentToObject的逆矩阵并不等于转置矩阵
+				// 因为inverse(tangentToObject) ~= objectToTangent; 其中inverse是一个计算逆矩阵的方法
+				// 因此在平常开发过程中，一定要弄清楚当前构建的变换矩阵是否是正交矩阵，并不能盲目把转置矩阵当逆矩阵使用
+			
+
                 // 使用模型空间下的法向量、切向量和副切向量构建的是模型空间到切线空间的变换矩阵
                 // TODO: 后面看了下这个应该是切线空间转为模型空间下才对
 				float3 bitangentOS = normalize(cross(v.normalOS, v.tangentOS.xyz) * v.tangentOS.w);
